@@ -1,0 +1,20 @@
+{
+  "exe": "D:/Users/MSI-1/AppData/Local/Programs/PiDeck/PiDeck.exe",
+  "exeSha256": "d1b636998298846a1a3c5dc8dcf2e7bd4beb0dbed97a7ae327314e5bc24ab1cd",
+  "wireVersion": "1",
+  "embeddedAsarIntegrity": "DISABLE",
+  "onlyLoadAppFromAsar": "DISABLE",
+  "patchAllowed": true,
+  "wire": {
+    "0": 49,
+    "1": 48,
+    "2": 49,
+    "3": 49,
+    "4": 48,
+    "5": 48,
+    "6": 48,
+    "7": 49,
+    "8": 49,
+    "version": "1"
+  }
+}

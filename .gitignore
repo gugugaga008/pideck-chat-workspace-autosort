@@ -1,0 +1,27 @@
+# PiDeck source is kept in its own upstream repository at this path.
+# Local source commit: see PiDeck.commit
+/PiDeck/
+
+# Maintenance-tool dependencies
+/node_modules/
+
+# Immutable original/previous archives and staged smoke binaries
+/backups/
+/packages/*/app.asar
+/packages/*/app.asar.unpacked/
+/verification/app/
+/verification/base/
+/verification/profile-*/
+
+# Runtime logs and one-off status output
+/logs/
+*.log
+/status-*.json
+/status-*.err
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Generated status snapshots (kept in source-validation.txt instead)
+/verification/status-*.json

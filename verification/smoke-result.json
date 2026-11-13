@@ -1,0 +1,27 @@
+{
+  "passed": true,
+  "executablePath": "E:\\tools\\pideck-chat-workspace-autosort\\verification\\app\\PiDeck.exe",
+  "profile": "E:\\tools\\pideck-chat-workspace-autosort\\verification\\profile-b9aQNT\\profile",
+  "sessions": [
+    {
+      "id": "182bda76-884f-4465-bfac-f083a43548bc",
+      "workspacePath": "E:\\tools\\pideck-chat-workspace-autosort\\verification\\profile-b9aQNT\\profile\\chat-workspace\\2026-11-13\\番茄钟网页--182bda76-884f-4465-bfac-f083a43548bc",
+      "filePath": "C:\\Users\\MSI-1\\AppData\\Local\\Temp\\mock-4867ee3778.jsonl"
+    },
+    {
+      "id": "6f83ca8a-f819-4759-a32a-ea99fd013bc4",
+      "workspacePath": "E:\\tools\\pideck-chat-workspace-autosort\\verification\\profile-b9aQNT\\profile\\chat-workspace\\2026-11-13\\记账图标--6f83ca8a-f819-4759-a32a-ea99fd013bc4",
+      "filePath": "C:\\Users\\MSI-1\\AppData\\Local\\Temp\\mock-510c81773c.jsonl"
+    }
+  ],
+  "checks": [
+    "packaged startup",
+    "AI intent names from the completion sidecar",
+    "first prompts accepted through mock pi",
+    "different real process cwd",
+    "same-name files isolated",
+    "session-scoped file tree and search",
+    "no chat subdirectory registered as project",
+    "restart and reactivation keep binding"
+  ]
+}

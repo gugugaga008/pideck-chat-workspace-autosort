@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Chat workspace</title>
+		<link rel="stylesheet" href="styles.css" />
+	</head>
+	<body>
+		<main>
+			<p id="eyebrow" class="muted"></p>
+			<h1 id="title"></h1>
+			<p id="description"></p>
+			<section class="card">
+				<label for="enabled"><span id="toggle-label"></span><input id="enabled" type="checkbox" disabled /></label>
+				<p id="status" role="status" aria-live="polite"></p>
+				<button id="refresh" type="button" disabled></button>
+			</section>
+			<section class="card">
+				<h2 id="root-label"></h2>
+				<code id="root"></code>
+				<p id="layout"></p>
+				<p id="timing" class="muted"></p>
+			</section>
+		</main>
+		<script type="module" src="app.js"></script>
+	</body>
+</html>

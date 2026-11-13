@@ -1,0 +1,13 @@
+{
+	"schemaVersion": 1,
+	"apiVersion": 1,
+	"id": "chat-workspace-autosort",
+	"name": "聊天目录自动分类",
+	"version": "1.0.0",
+	"description": "管理定制 PiDeck 宿主的新聊天目录自动分类开关。根目录不变，旧会话不移动。",
+	"permissions": ["chatWorkspace.manage"],
+	"contributes": {
+		"panels": [{ "id": "main", "title": "聊天目录自动分类", "entry": "app.html", "icon": "layers", "presentation": "page" }],
+		"commands": [{ "id": "open", "title": "聊天目录自动分类", "panelId": "main" }]
+	}
+}

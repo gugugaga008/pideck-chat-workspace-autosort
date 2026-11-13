@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "bases": [
+    {
+      "version": "0.12.0",
+      "sha256": "e820040621072d30c22c55c376298d17f0fdb9279ef5bfe813ea31eba7a99db3",
+      "checked": 4417,
+      "headerSha256": "086dba47bcffef7c460b7e2fd90ca6505be22b52e84274ee303dbe63a3d2a44e"
+    }
+  ],
+  "note": "Verified against hardcoded independently supplied allowlist; not a vendor signature."
+}

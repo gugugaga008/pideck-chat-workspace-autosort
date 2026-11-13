@@ -1,0 +1,35 @@
+Source baseline: PiDeck v0.12.0 cf57f7f0012f7a30431ac6164802eb1e08bab843
+Installed base ASAR SHA256: e820040621072d30c22c55c376298d17f0fdb9279ef5bfe813ea31eba7a99db3
+
+Validation performed 2026-11-13:
+- npm run typecheck: PASS (exit 0, full repository TypeScript check).
+- Targeted suite: 218 PASS, 0 FAIL.
+  Command: node --test tests/chatWorkspace*.test.mjs tests/hostPluginChatWorkspace.test.mjs tests/hostPlugins.test.mjs tests/hostPluginScaffold.test.mjs tests/hostPluginNetworkUi.test.mjs tests/docsSharedGuide.test.mjs tests/workspaceDirectoryUi.test.mjs tests/sessionRecordIdentity.test.mjs tests/projectServicesHook.test.mjs tests/filesListTarget.test.mjs tests/sessionRuntimeCoordinator.test.mjs tests/agentSessionReplacement.test.mjs tests/sessionCatalogRowsRemoved.test.mjs tests/sessionCatalogActivityTime.test.mjs
+- New AI intent naming tests: covered success, quoted/empty output, model error/rejection, synchronous throw, timeout+cancel, single-flight, and no-model/no-prompt fallback.
+- Maintenance/fixture suite: 8 PASS, 0 FAIL, including direct upgrade from the previous verified patch and restore.
+- Isolated full-program upgrade: 1.0.0 patched app.asar -> 1.1.0 package -> patched, then restore -> original base; PASS (verification/install-1.1.0.log, verification/restore-1.1.0.log).
+- electron-vite build (main + preload + renderer): PASS.
+- git diff --check and targeted Biome formatting: PASS.
+
+Packaged runtime smoke test (isolated full-program copy under verification/app, mock pi, temporary profile):
+- Two new chats sent their first prompts through the packaged app and received different bound directories:
+  <chat-root>/2026-11-13/<intent>--<session-id>
+- The packaged smoke used a deterministic fake completion sidecar; the two workspace names were "番茄钟网页" and "记账图标", proving the AI naming path rather than the first-message fallback.
+- The pi session header cwd matched each bound workspace (real process cwd check).
+- Writing the same file name in both sessions produced isolated files.
+- Session-scoped file tree and file-name search returned the allocated directory contents.
+- No chat subdirectory was auto-registered as a project.
+- Closing and relaunching the packaged app, then reactivating both sessions, preserved the original bindings.
+- Evidence: verification/smoke-result.json and verification/smoke.log.
+- This smoke test used a copied executable and an isolated profile; the real installation was not modified.
+
+Dependency notes:
+- npm ci rejected the upstream lockfile for missing @emnapi entries.
+- Development dependencies installed with npm install --legacy-peer-deps --ignore-scripts --package-lock=false; source package-lock unchanged.
+- Missing peer/type packages @deepseek-ai/dsh-attachment@0.2.1-rc.5 and react-is@19.2.8 obtained via npm pack and unpacked into development node_modules. No production dependencies replaced in the target application.
+
+Packaging policy:
+- Preserve installed unpacked files and all original main chunks, including DSH hostEntry.js.
+- Overlay built packed main files; replace preload and renderer components as matching sets.
+- Original archive files outside these selected application code paths remain byte-identical.
+- Built with build-patch.mjs; base archive, fuse state and output integrity are rechecked by the maintenance tool.
