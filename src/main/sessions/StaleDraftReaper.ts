@@ -29,7 +29,7 @@ export function isReapableStaleDraft(entry: SessionCatalogEntry, now: number, op
 	// 匿名/引导页会话（transientEntries）本来就是进程内临时面，不归本清理器
 	if (entry.noSession) return false;
 	// 已落盘或激活过 = 发送过消息（mergeScanned 会把有文件的条目抬成 active，双保险）
-	if (entry.filePath || entry.piSessionId) return false;
+	if (entry.filePath || entry.piSessionId || entry.workspacePath) return false;
 	// 用户投入信号：命名过的（manual/legacy）不删
 	if (entry.titleOrigin === "manual" || entry.titleOrigin === "legacy") return false;
 	// 用户投入信号：显式选过模型 / DSH 权限预设 / agent 预设 / 会话级代理

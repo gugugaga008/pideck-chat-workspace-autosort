@@ -1,3 +1,4 @@
+import type { ChatWorkspaceSettings, ChatWorkspaceSettingsUpdate } from "../chatWorkspace";
 import type { AgentBackend } from "./agent";
 import type { LocalServiceStatus } from "../localServices";
 import type { SaveSessionGroupInput } from "./sessionGroups";
@@ -13,7 +14,9 @@ export type HostPluginPermission =
 	| "network.local"
 	| "service.local"
 	/** 读写宿主会话分组（sessionGroups.*）：唯一写入方约定见 docs/host-boundaries.md 例外七。 */
-	| "sessionGroups.manage";
+	| "sessionGroups.manage"
+	/** 仅修改主进程聊天目录自动分类开关；不授予路径、文件或会话控制能力。 */
+	| "chatWorkspace.manage";
 /**
  * 插件能看到的会话范围，**由 PiDeck 依 manifest 权限算出来**写进 context，插件入参一律被覆盖。
  * project = 只有当前项目（默认）；workspace = 整个工作区（需 `sessions.read.workspace`）。
@@ -105,6 +108,8 @@ export type HostPluginEntriesPage = {
 export type HostPluginSessionsChangedDetail = { catalogChanged: boolean; sessionId?: string };
 export type HostPluginEvent = { type: "context.changed"; context: HostPluginContext } | { type: "sessions.changed"; detail?: HostPluginSessionsChangedDetail };
 export type HostPluginRequest =
+	| { method: "chatWorkspace.getSettings" }
+	| { method: "chatWorkspace.updateSettings"; settings: ChatWorkspaceSettingsUpdate }
 	| { method: "context.get" }
 	| { method: "sessions.list"; offset?: number }
 	| { method: "sessions.get"; sessionId: string }
@@ -255,6 +260,11 @@ export type HostPluginApi = {
 		delete: (groupId: string) => Promise<boolean>;
 		/** 保存分组显示顺序；返回全量列表。 */
 		reorder: (groupIds: string[]) => Promise<import("./sessionGroups").SessionGroup[]>;
+	};
+	/** 定制宿主的主进程配置；两方法均需 chatWorkspace.manage，未适配时 supported=false。 */
+	chatWorkspace: {
+		getSettings: () => Promise<ChatWorkspaceSettings>;
+		updateSettings: (settings: ChatWorkspaceSettingsUpdate) => Promise<ChatWorkspaceSettings>;
 	};
 	onEvent: (listener: (event: HostPluginEvent) => void) => () => void;
 };

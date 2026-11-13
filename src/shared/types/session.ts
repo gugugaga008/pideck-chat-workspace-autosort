@@ -331,6 +331,8 @@ export type SessionRecord = {
 	sideTask?: boolean;
 	/** 运行时后端（pi/dsh）；缺省 "pi"，旧 catalog 数据无需迁移。 */
 	backend?: import("./agent").AgentBackend;
+	/** Host-owned working directory; never accepted by draft/update renderer inputs. */
+	workspacePath?: string;
 	/** Canonical file-backed location; absent for DSH, imagegen, and anonymous sessions. */
 	locator?: SessionLocator;
 	/** Local-only compatibility path; use locator for history routing. */

@@ -5,7 +5,7 @@ import type { HostPluginScaffoldInput } from "../../../shared/types/hostPlugin";
 export type HostPluginScaffoldDraft = Omit<HostPluginScaffoldInput, "network" | "services"> & { httpsOrigins: string; localPorts: string; services: string[] };
 const SCAFFOLD_ID = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 
-/** Network is opt-in; keep session viewing as the existing default. */
+/** Network and chatWorkspace.manage are opt-in; keep session viewing as the existing default. */
 export function initialHostPluginScaffoldDraft(): HostPluginScaffoldDraft {
 	return { id: "", name: "", permissions: ["sessions.read"], presentation: "modal", httpsOrigins: "", localPorts: "", services: [] };
 }

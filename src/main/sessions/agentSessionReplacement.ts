@@ -89,6 +89,7 @@ export function createAgentSessionReplacer(deps: ReplacementDependencies) {
 					source: tab.sessionSource ?? originEntry?.source ?? "pi",
 					environment,
 					filePath: tab.sessionPath,
+					workspacePath: originEntry?.workspacePath,
 					wslDistro: tab.wslDistro ?? (environment === "wsl" ? originEntry?.wslDistro : undefined),
 					wslUser: tab.wslUser ?? (environment === "wsl" ? originEntry?.wslUser : undefined),
 					importedSourceId: tab.importedSourceId ?? originEntry?.importedSourceId,

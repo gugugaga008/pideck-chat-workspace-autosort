@@ -1,4 +1,5 @@
 /** Dedicated, sender-bound API. Neither renderer-supplied plugin IDs nor raw IPC are capabilities. */
+import type { ChatWorkspaceSettingsPort } from "../../shared/chatWorkspace";
 import type { HostPluginContext, HostPluginResponse } from "../../shared/types/hostPlugin";
 import type { SessionGroupStore } from "../sessionGroups/sessionGroupStore";
 import type { HostPluginManager } from "./HostPluginManager";
@@ -42,6 +43,8 @@ export class HostPluginBroker {
 		private readonly services = new LocalServiceRegistry([]),
 		/** 会话分组 store（惰性求值）：未装配时 sessionGroups.* 一律 `service-unavailable`（fail-closed）。 */
 		private readonly sessionGroups?: () => SessionGroupStore | undefined,
+		/** 只管理聊天目录自动分类开关；服务在正式写入前调用 beforeAttempt 复查授权。 */
+		private readonly chatWorkspace?: ChatWorkspaceSettingsPort,
 	) {
 		// Manager revocation happens before persistence: do not leave a live socket while disable writes to disk.
 		this.unsubscribe = manager.onChanged(() => {
@@ -140,6 +143,7 @@ export class HostPluginBroker {
 			// 会话分组是宿主数据（侧栏消费同一份）：整体替换式写入，不做逐字段合并；
 			// 权限逐个登记（不用前缀推断）：新增方法忘了登记会报错，而不是白拿权限。
 			if (request.method.startsWith("sessionGroups.") && !plugin.manifest.permissions.includes("sessionGroups.manage")) throw new Error("permission-denied");
+			if ((request.method === "chatWorkspace.getSettings" || request.method === "chatWorkspace.updateSettings") && !plugin.manifest.permissions.includes("chatWorkspace.manage")) throw new Error("permission-denied");
 			let value: unknown;
 			switch (request.method) {
 				case "network.request": {
@@ -152,6 +156,14 @@ export class HostPluginBroker {
 					}
 					break;
 				}
+				case "chatWorkspace.getSettings":
+					value = this.chatWorkspace ? await this.chatWorkspace.getSettings() : { enabled: false, supported: false };
+					break;
+				case "chatWorkspace.updateSettings":
+					if (!this.chatWorkspace) throw new Error("service-unavailable");
+					// 不能只在 await 后丢回包：服务须在排队/重试后的每次提交前调用回调，防止撤权后写盘。
+					value = await this.chatWorkspace.updateSettings(request.settings, () => this.authorized(senderId, binding, generation));
+					break;
 				case "context.get":
 					value = binding.context;
 					break;

@@ -2032,7 +2032,7 @@ export const bindSessionRuntimeAtom = atom(
 				status: input.status ?? (bindingChanged ? "idle" : current?.status) ?? "idle",
 				state: bindingChanged ? undefined : current?.state,
 				projectId: current?.projectId ?? record?.projectId,
-				cwd: current?.cwd ?? (record?.projectPath || undefined),
+				cwd: current?.cwd ?? record?.workspacePath ?? (record?.projectPath || undefined),
 				title: current?.title ?? record?.title,
 				sessionPath: current?.sessionPath ?? record?.filePath,
 				createdAt: current?.createdAt ?? record?.createdAt,

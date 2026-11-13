@@ -13,6 +13,7 @@ export const HOST_PLUGIN_PERMISSION_OPTIONS = [
 	["network.https", "hostPlugins.networkHttps", "hostPlugins.networkHttpsHint"],
 	["network.local", "hostPlugins.networkLocal", "hostPlugins.networkLocalHint"],
 	["service.local", "hostPlugins.serviceLocal", "hostPlugins.scaffoldServiceLocalHint"],
+	["chatWorkspace.manage", "hostPlugins.chatWorkspaceManage", "hostPlugins.chatWorkspaceManageHint"],
 	["sessionGroups.manage", "hostPlugins.sessionGroupsManage", "hostPlugins.sessionGroupsManageHint"],
 ] as const;
 
@@ -25,6 +26,7 @@ export const HOST_PLUGIN_PERMISSION_CHIP_KEYS: Record<HostPluginPermission, Tran
 	"network.https": "hostPlugins.chipHttps",
 	"network.local": "hostPlugins.chipLocal",
 	"service.local": "hostPlugins.chipService",
+	"chatWorkspace.manage": "hostPlugins.chipChatWorkspace",
 	"sessionGroups.manage": "hostPlugins.chipSessionGroups",
 };
 
@@ -83,6 +85,11 @@ export function HostPluginPermissionDetails({ manifest, warnings = false }: { ma
 						))}
 					</ul>
 				</div>
+			)}
+			{warnings && manifest.permissions.includes("chatWorkspace.manage") && (
+				<Alert>
+					<AlertDescription>{t("hostPlugins.chatWorkspaceManageHint")}</AlertDescription>
+				</Alert>
 			)}
 			{warnings && services && (
 				<Alert>

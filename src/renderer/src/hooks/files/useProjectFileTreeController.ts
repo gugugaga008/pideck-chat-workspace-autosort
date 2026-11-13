@@ -57,8 +57,10 @@ export function useProjectFileTreeController({ setFiles, activeProjectId, servic
 	// effect 重跑 → 再次加载失败，形成无限「项目目录不存在」toast 循环。
 	const isLocalProjectIdRef = useRef(isLocalProjectId);
 	isLocalProjectIdRef.current = isLocalProjectId;
-	const saveExpandedDirs = useCallback((projectId: string, dirs: Set<string>) => saveExpandedDirsToStorage(projectId, dirs), []);
-	const loadExpandedDirs = useCallback((projectId: string) => loadExpandedDirsFromStorage(projectId, legacyAgentIdsForProject(agentsRef.current, projectId)), [agentsRef]);
+	const treeScope = services?.generation.includes(":session:") ? services.generation : "";
+	const storageKey = useCallback((projectId: string) => (treeScope ? `${projectId}:${treeScope}` : projectId), [treeScope]);
+	const saveExpandedDirs = useCallback((projectId: string, dirs: Set<string>) => saveExpandedDirsToStorage(storageKey(projectId), dirs), [storageKey]);
+	const loadExpandedDirs = useCallback((projectId: string) => loadExpandedDirsFromStorage(storageKey(projectId), treeScope ? [] : legacyAgentIdsForProject(agentsRef.current, projectId)), [agentsRef, storageKey, treeScope]);
 
 	const reportError = useCallback((code: string) => {
 		const tooLarge = code.match(/FILE_TREE_DIRECTORY_TOO_LARGE:(\d+):(\d+)/);

@@ -10,6 +10,7 @@ import type { AgentTab } from "../../../../shared/types";
 import type { WorkspaceDrawerPanel } from "../useWorkspacePanels";
 
 export interface SessionFileLinksDeps {
+	activeBaseDir?: string;
 	activeAgent: AgentTab | undefined;
 	activeProject: Project | undefined;
 	/** 全部已打开项目：项目外链接若落在另一个项目内，按那个项目的写边界打开 */
@@ -39,7 +40,7 @@ export interface SessionFileLinksDeps {
  * 3) handleOpenLinkedFile：会话内文件链接打开路由（项目内分级打开 / 项目外安全门）；
  * 4) handleToolDrawerAction：工具抽屉（files/git/browser）统一切换语义，浮动按钮与活动栏共用。
  */
-export function useSessionFileLinks({ activeAgent, activeProject, projects, currentSessionId, activeProjectId, showToast, setPreviewImage, viewFilePath, workspace, gitDrawerDiff, closeGitDiff, refreshVisibleFiles, restoreExpandedDirs }: SessionFileLinksDeps) {
+export function useSessionFileLinks({ activeBaseDir, activeAgent, activeProject, projects, currentSessionId, activeProjectId, showToast, setPreviewImage, viewFilePath, workspace, gitDrawerDiff, closeGitDiff, refreshVisibleFiles, restoreExpandedDirs }: SessionFileLinksDeps) {
 	const openSessionFilePath = useSessionFilePathOpener({ onPreviewImage: setPreviewImage, viewFilePath });
 	const { requestExternalPathOpen, dialog: externalPathOpenDialog } = useExternalPathOpenGate();
 
@@ -50,7 +51,7 @@ export function useSessionFileLinks({ activeAgent, activeProject, projects, curr
 	const handleOpenLinkedFile = useCallback(
 		async (path: string, line?: number, context?: SessionFileOpenContext) => {
 			// 有栏级上下文时绝不回退 App 当前焦点：分屏左栏的点击不能借用右栏 cwd/project。
-			const baseDir = context ? context.baseDir : (activeAgent?.cwd ?? activeProject?.path);
+			const baseDir = context ? context.baseDir : (activeBaseDir ?? activeAgent?.cwd ?? activeProject?.path);
 			const projectRoot = context ? context.projectRoot : activeProject?.path;
 			const projectId = context ? context.projectId : activeProject?.id;
 			// 会话内入口必须携带稳定 projectId；缺失时不能降级成通用读取绕开主进程项目边界。
@@ -92,7 +93,7 @@ export function useSessionFileLinks({ activeAgent, activeProject, projects, curr
 				proceed: () => void openSessionFilePath(externalPath, { line, readOnly: true }),
 			});
 		},
-		[activeAgent?.cwd, activeProject?.id, activeProject?.path, projects, currentSessionId, openSessionFilePath, requestExternalPathOpen, showToast, t],
+		[activeBaseDir, activeAgent?.cwd, activeProject?.id, activeProject?.path, projects, currentSessionId, openSessionFilePath, requestExternalPathOpen, showToast, t],
 	);
 
 	// 工具抽屉（files/git/browser）的统一切换语义：当前面板已展开 → 关闭；

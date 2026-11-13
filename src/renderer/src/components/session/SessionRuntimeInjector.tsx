@@ -4,6 +4,7 @@ import { resolvePaneTerminal, terminalOwnerKey, shouldMountPaneTerminalDock } fr
 import { settingsOpenAtom } from "../../atoms";
 import { claimSessionRuntimeUiResponseAtom, rollbackSessionRuntimeUiResponseAtom, setSessionHistoryMutationOverlayAtom } from "../../atoms/session-atoms";
 import { recordAskEchoAtom } from "../../atoms/ask-echo-atoms";
+import { sessionFileBaseDir } from "../../hooks/files/sessionDirectoryServices";
 import { sessionRecordByIdAtomFamily, sessionRuntimeBySessionIdAtomFamily, sessionRuntimeUiBySessionIdAtomFamily } from "../../atoms/session-selectors";
 import { projectByIdAtomFamily } from "../../atoms/project-atoms";
 import { useSessionRuntimeController } from "../../hooks/useSessionRuntimeController";
@@ -66,14 +67,14 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
 	const paneProject = useAtomValue(projectByIdAtomFamily(paneProjectId));
 	const paneFileContext = React.useMemo(
 		() => ({
-			// runtime cwd 是该会话真正执行工具的目录；未启动时回退 catalog 项目根。
-			baseDir: currentSessionRuntime?.cwd ?? paneProject?.path,
+			// Relative links use this pane's runtime or persisted workspace.
+			baseDir: sessionFileBaseDir(currentSessionRuntime?.cwd, sessionRecord?.workspacePath, paneProject?.path),
 			projectId: paneProjectId || undefined,
 			projectRoot: paneProject?.path,
 			// 项目外路径的安全等级判定按本栏会话走，分屏两栏各自的安全等级互不干扰。
 			sessionId: currentSessionId,
 		}),
-		[currentSessionId, currentSessionRuntime?.cwd, paneProject?.path, paneProjectId],
+		[currentSessionId, currentSessionRuntime?.cwd, sessionRecord?.workspacePath, paneProject?.path, paneProjectId],
 	);
 	const openPaneFile = React.useCallback((path: string, line?: number) => services.onOpenFile(path, line, paneFileContext), [paneFileContext, services.onOpenFile]);
 	const paneTerminal = React.useMemo(

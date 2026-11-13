@@ -47,6 +47,16 @@ export function parsePluginContext(value: unknown): HostPluginContext {
 
 export function parsePluginRequest(value: unknown): HostPluginRequest {
 	if (!isPluginRecord(value)) throw new Error("invalid-request");
+	if (value.method === "chatWorkspace.getSettings") {
+		if (Object.keys(value).some((key) => key !== "method")) throw new Error("invalid-request");
+		return { method: value.method };
+	}
+	if (value.method === "chatWorkspace.updateSettings") {
+		const settings = value.settings;
+		// 专用开关不接受附加路径、会话或任意设置；未知字段必须拒绝，不能静默忽略。
+		if (Object.keys(value).some((key) => key !== "method" && key !== "settings") || !isPluginRecord(settings) || Object.keys(settings).length !== 1 || !Object.hasOwn(settings, "enabled") || typeof settings.enabled !== "boolean") throw new Error("invalid-request");
+		return { method: value.method, settings: { enabled: settings.enabled } };
+	}
 	if (value.method === "context.get") return { method: value.method };
 	if (value.method === "network.request") return { method: value.method, request: parseHostPluginNetworkRequest(value.request) };
 	if (value.method === "sessions.list") {

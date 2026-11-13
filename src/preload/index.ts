@@ -585,10 +585,10 @@ const api = {
 		 * 公共目录页（T6）：位置无关，带 `truncated` 与事实版本。
 		 * 本地与远端返回同一形状；`hasChildren` 远端为 "unknown"（不假装空目录）。
 		 */
-		directoryPage: (target: ProjectFileTarget, options?: { force?: boolean }) => ipcRenderer.invoke(ipcChannels.filesDirectoryPage, target, options) as Promise<import("../shared/types/projectFiles").ProjectDirectoryPageResult>,
+		directoryPage: (target: import("../shared/types/projectFiles").ProjectDirectoryRequest, options?: { force?: boolean }) => ipcRenderer.invoke(ipcChannels.filesDirectoryPage, target, options) as Promise<import("../shared/types/projectFiles").ProjectDirectoryPageResult>,
 		/** 工作区文件名搜索（issue #215）：主进程全盘扫描，忽略规则与文件抽屉的文件树同档（只跳 .git/node_modules） */
 		/** 公共文件名搜索页（位置分派收口）：本机与远端同一形状，带 truncated/scanned 与远端原始 entries。 */
-		searchPage: (projectId: string, query: string) => ipcRenderer.invoke(ipcChannels.filesSearchPage, projectId, query) as Promise<import("../shared/types/projectFiles").ProjectFileSearchPageResult>,
+		searchPage: (projectId: string | import("../shared/types/projectFiles").ProjectDirectoryRequest, query: string) => ipcRenderer.invoke(ipcChannels.filesSearchPage, projectId, query) as Promise<import("../shared/types/projectFiles").ProjectFileSearchPageResult>,
 		/** 工作区文件内容检索（Go file-index sidecar）：未就绪/不可用时回 null，渲染层不展示内容分区 */
 		searchContent: (projectId: string, query: string) => ipcRenderer.invoke(ipcChannels.filesSearchContent, projectId, query) as Promise<FileContentSearchResult | null>,
 		open: (path: string | ProjectFileTarget, scope?: ProjectFileAccessScope) => ipcRenderer.invoke(ipcChannels.filesOpen, path, scope) as Promise<void>,

@@ -11,6 +11,11 @@ import type { ProjectFileTarget } from "./project";
 import type { RemoteProjectSearchEntry } from "./remoteHost";
 import type { FileSearchResult } from "./session";
 
+export type ProjectDirectoryRequest = ProjectFileTarget & {
+	/** Main resolves the root from the catalog; renderer cannot supply a cwd. */
+	sessionId?: string;
+};
+
 export type ProjectDirectoryEntry = {
 	target: ProjectFileTarget;
 	relativePath: string;

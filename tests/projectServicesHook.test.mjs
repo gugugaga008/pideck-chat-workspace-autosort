@@ -19,6 +19,9 @@ function harness(snapshot) {
 	let disposed = 0;
 	const { useProjectServices } = loadTsCommonJs("src/renderer/src/hooks/useProjectServices.ts", {
 		stubs: {
+			jotai: { useAtomValue: () => undefined },
+			"../atoms/session-atoms": { currentSessionIdAtom: {} },
+			"../atoms/session-selectors": { sessionRecordByIdAtomFamily: () => ({}) },
 			react: host.react,
 			"../desktopApi": { desktopApi: {} },
 			"../services/projectServiceRuntime": {

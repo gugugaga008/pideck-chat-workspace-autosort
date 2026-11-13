@@ -89,6 +89,10 @@ export const enUS: Record<TranslationKey, string> = {
 	"hostPlugins.networkLocalWarning": "A local port is not automatically trusted. Verify the program listening on it and its API. PiDeck will not start it or attach browser cookies or app credentials.",
 	"hostPlugins.serviceLocal": "Start and stop a chosen local service",
 	"hostPlugins.scaffoldServiceLocalHint": "Only services with a PiDeck-provided adapter (such as billion-context) can be started or stopped, and PiDeck opens their web panel in the built-in browser. Commands, arguments and ports stay in PiDeck — a plugin can only name a service.",
+	"hostPlugins.chatWorkspaceManage": "Manage automatic chat directory organization",
+	"hostPlugins.chatWorkspaceManageHint":
+		"Reads and changes the main-process setting for organizing new chat directories, which remains active when the panel is closed. The host fixes the root; existing sessions stay in place. Cannot select paths, modify sessions or execute commands. Requires a custom host with this capability.",
+	"hostPlugins.chipChatWorkspace": "Chat directories",
 	"hostPlugins.sessionGroupsManage": "Read and write session groups",
 	"hostPlugins.sessionGroupsManageHint": "Reads and writes the host's session group data (group names, colors, session references and directory scopes). The sidebar group tree consumes the same data, so edits here show up there live; message contents are never touched.",
 	"hostPlugins.serviceDestinations": "Controllable local services (no others are reachable)",

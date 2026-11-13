@@ -25,6 +25,7 @@ title: 宿主插件开发指南
 | 用系统浏览器打开 https 链接：`workbench.openExternal` | 打开本地文件、`file://`、带账号密码的 URL |
 | 每插件 1 MiB 私有 JSON 存储：`storage.*` | 访问别的插件的数据或应用数据目录 |
 | 订阅 `context.changed` / `sessions.changed` 事件做实时刷新 | 访问 `require` / `process` / `ipcRenderer` / Node 或 Electron API |
+| 管理定制宿主的新聊天目录自动分类开关：`chatWorkspace.getSettings` / `updateSettings` | 指定聊天根路径、移动旧会话、修改会话或执行命令 |
 | 注册命令到 PiDeck 命令面板（Ctrl+K） | 注册全局快捷键、改 PiDeck 界面、注入脚本到主界面 |
 
 适合做的：**会话数据查看器、统计面板、本地可视化、导出预览、第三方 API 工具、已启动本地服务的前端**。会话 API 仍然只读；网络 POST 则可能改变远端/本地服务的数据，不能把「联网」理解成无副作用。
@@ -50,7 +51,7 @@ title: 宿主插件开发指南
 2. 点 **「新建插件…」**，填：
    - **插件 ID**：小写字母开头，`[a-z0-9.-]`，≤80 字符，例如 `demo.viewer`（同时是生成目录名）；
    - **显示名**：面板与命令里的名字；
-   - **权限**：默认只勾 `sessions.read`；按需增加 `workbench.navigate` / `workbench.openExternal` / `network.https` / `network.local` / `service.local` / `sessionGroups.manage`。纯联网工具可取消会话读取；
+   - **权限**：默认只勾 `sessions.read`；按需增加 `workbench.navigate` / `workbench.openExternal` / `network.https` / `network.local` / `service.local` / `sessionGroups.manage` / `chatWorkspace.manage`。纯联网工具可取消会话读取；
    - **网络目的地**（仅勾网络权限时出现）：HTTPS 填 `https://api.example.com` 这样的 origin，本地填明确端口（如 `4187`）；多个值用逗号或空白分隔，每类最多 16 个，不支持通配符；
    - **面板形态**：`modal`（大弹框，默认）、`popover`（侧栏一行旁边的浮层，适合几行控件的紧凑面板）或 `page`（工作区内联页）；
 3. 生成后目录出现在插件目录里，并自动重新扫描（默认**禁用**）；
@@ -155,7 +156,7 @@ for (const session of page.sessions) {
 | `name` | ✅ | 非空，≤160 字符，无控制字符 |
 | `version` | ✅ | 非空，≤160 字符（仅用于展示，授权不看它） |
 | `description` | — | ≤1000 字符 |
-| `permissions` | ✅ | 数组，只能取 `sessions.read` / `sessions.read.workspace` / `workbench.navigate` / `workbench.openExternal` / `network.https` / `network.local` / `service.local` / `sessionGroups.manage`，不能重复；未知权限拒装。`sessions.read.workspace` 是 `sessions.read` 的**范围扩展**（把读取与导航扩到整个工作区），必须同时声明 `sessions.read`，单独声明直接拒装 |
+| `permissions` | ✅ | 数组，只能取 `sessions.read` / `sessions.read.workspace` / `workbench.navigate` / `workbench.openExternal` / `network.https` / `network.local` / `service.local` / `sessionGroups.manage` / `chatWorkspace.manage`，不能重复；未知权限拒装。`sessions.read.workspace` 是 `sessions.read` 的**范围扩展**（把读取与导航扩到整个工作区），必须同时声明 `sessions.read`，单独声明直接拒装 |
 | `network` | 网络权限存在时 ✅ | `network.https` 对应 `httpsOrigins`，`network.local` 对应 `localPorts`。没声明对应权限不得填写该字段；规则见 5.5 |
 | `services` | `service.local` 存在时 ✅ | 1–8 个，只能点名 PiDeck **已实现适配器**的本地服务（当前仅 `billion-context`）；没声明 `service.local` 不得填写该字段；规则见 5.8 |
 | `contributes.panels` | ✅ | 1–8 个。`id`（同上 ID 规则）、`title`（≤160）、`entry`（包内相对路径，**必须以 `.html` 结尾**）、`icon`（白名单，可选）、`presentation`（`modal` / `popover` / `page`，可选） |
@@ -209,6 +210,8 @@ for (const session of page.sessions) {
 | `pideck.sessionGroups.save(group)` | `sessionGroups.manage` | `SessionGroup[]`（按 id upsert 一组，`id` 省略 = 新建，返回全量） |
 | `pideck.sessionGroups.delete(groupId)` | `sessionGroups.manage` | `boolean`（是否真的删了） |
 | `pideck.sessionGroups.reorder(groupIds)` | `sessionGroups.manage` | `SessionGroup[]`（保存显示顺序，未知 id 容错） |
+| `pideck.chatWorkspace.getSettings()` | `chatWorkspace.manage` | `{ enabled, rootPath?, supported? }`（仅定制宿主） |
+| `pideck.chatWorkspace.updateSettings({ enabled })` | `chatWorkspace.manage` | 保存后的 `{ enabled, rootPath?, supported? }` |
 | `pideck.onEvent(listener)` | — | 取消订阅函数 |
 
 > 兼容策略：新能力只做加法。老插件不受影响；想探测新方法用 `typeof pideck.sessions.search === "function"`。
@@ -530,6 +533,29 @@ type SessionGroup = {
 - 分组是跨插件的共享数据：按 id 增量改，禁止整表清空重建；单组会话引用上限 20000，组数上限 200。
 - 保存/删除/排序分别有 1 次 IPC 往返；高频操作（拖拽、勾选）先改内存、防抖后再落盘（参考 `docs/examples/host-plugins/session-groups/` 的 `queue()` 串行 + 签名 diff 写法）。
 
+### 5.10 聊天目录自动分类设置（`chatWorkspace.manage`，仅定制宿主）
+
+此能力只在实现聊天目录适配的**定制 PiDeck 宿主**上可用，不代表普通上游版本支持。manifest 只需声明 `"permissions": ["chatWorkspace.manage"]`，不需要会话读取、网络或服务权限。两种方法都需要该授权。
+
+```js
+const api = window.pideck.chatWorkspace;
+if (!api || typeof api.getSettings !== "function" || typeof api.updateSettings !== "function") {
+  showHostAdapterRequired(); // 安装具有此能力的宿主适配，不能用插件 storage 模拟启用
+} else {
+  const settings = await api.getSettings();
+  if (settings.supported === false) showHostAdapterRequired();
+  else await api.updateSettings({ enabled: true }); // 必须由用户显式切换
+}
+```
+
+返回类型与宿主共用 `src/shared/chatWorkspace.ts`：`{ enabled: boolean, rootPath?: string, supported?: boolean }`。`rootPath` 仅供显示、不可传回修改；`supported: false` 时禁止切换。旧的已实现适配宿主可省略 `supported`；缺少 port 的新版宿主明确返回 `{ enabled: false, supported: false }`，写入报 `service-unavailable`。
+
+- 写入参数**仅允许** `{ enabled: boolean }`，字符串/数值、额外路径、会话 id 或执行字段均报 `invalid-request`；无任意文件系统、设置或会话控制能力（边界见例外十）。
+- 主进程持久化开关并分配新聊天目录，**不开插件面板也会自动生效**；固定聊天根保持不变，新会话在根下按 `date/intent--id`（日期 / 意图--会话标识）组织。仅新会话生效，旧会话不移动；关闭开关后新会话恢复宿主原有目录规则。
+- 关闭/禁用插件不会反向改写已保存设置；如需停止自动分类，先通过开关关闭。插件不得自行创建/移动目录或改写会话文件。
+- Broker 将 `beforeAttempt: () => boolean` 传给主进程 port；服务须在事务正式提交前、每次替换重试前复查，false 时抛 `plugin-revoked` 并停止写入，不能只丢弃迟到回包。
+- 脚手架勾选此权限后生成读取与显式切换示例；API 缺失或不支持时禁用开关，写入失败后重新读取宿主真实状态。
+
 ## 6. 安全模型（为什么这些限制是这样）
 
 | 机制 | 说明 |
@@ -569,7 +595,7 @@ type SessionGroup = {
 | `network-request-failed` | DNS、TLS、连接等失败（底层细节不会泄露） | 确认服务运行、地址可达、TLS 证书有效 |
 | `network-response-too-large` / `network-headers-too-large` | 响应正文 / 响应头超预算 | 接口分页、减少返回内容 |
 | `network-response-type-denied` / `network-response-encoding-denied` | 非文本/JSON、压缩、非法 UTF-8 或非支持字符集 | 服务返回有界 UTF-8 JSON/text，禁用压缩 |
-| `service-unavailable` | 该 service id 没有 PiDeck 适配器 | 只用清单里声明过的服务 |
+| `service-unavailable` | service id 没有适配器，或宿主未装配聊天目录设置 port | 只用声明过的服务；聊天目录设置需安装支持 `chatWorkspace` 的定制宿主 |
 | `service-not-running` | 服务未运行，或 `openUi` 点名的 `pid` 不在 `status.instances` 白名单里（`stop` / `openUi` 时） | 先 `start`，或提示用户手动启动；点名实例前先刷新 `status` |
 | `cli-missing` / `cli-failed` / `invalid-report` | 外部 CLI 不存在 / 执行失败 / 输出无法解析 | 让用户先安装（如 `npm i -g billion-context`） |
 | `start-failed` / `start-timeout` / `stop-failed` | 启动命令没发出去 / 20 秒内没起来 / 终止失败 | 提示用户手动排查；不要自动重试 |

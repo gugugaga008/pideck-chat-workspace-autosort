@@ -1,3 +1,7 @@
+import { useAtomValue } from "jotai";
+import { currentSessionIdAtom } from "../atoms/session-atoms";
+import { sessionRecordByIdAtomFamily } from "../atoms/session-selectors";
+import { sessionDirectoryServices } from "./files/sessionDirectoryServices";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { isRemoteProject } from "../../../shared/projectLocation";
 import type { Project } from "../../../shared/types";
@@ -22,6 +26,9 @@ const NO_PROJECT_SNAPSHOT = () => null;
 export function useProjectServices(project: Project): ProjectServices;
 export function useProjectServices(project: Project | undefined): ProjectServices | null;
 export function useProjectServices(project: Project | undefined): ProjectServices | null {
+	const currentSessionId = useAtomValue(currentSessionIdAtom);
+	const record = useAtomValue(sessionRecordByIdAtomFamily(currentSessionId ?? ""));
+	const sessionId = project?.kind === "chat" && record?.projectId === project.id ? currentSessionId : undefined;
 	const hostId = project !== undefined && isRemoteProject(project) ? project.locator.hostId : "";
 	const remotePath = project !== undefined && isRemoteProject(project) ? project.locator.remotePath : "";
 	// project 对象其余字段（名称/排序）不参与服务身份；id/host/root 变化必须换 runtime。
@@ -31,5 +38,6 @@ export function useProjectServices(project: Project | undefined): ProjectService
 		return runtime.start();
 	}, [runtime]);
 	const getSnapshot = runtime?.getSnapshot ?? NO_PROJECT_SNAPSHOT;
-	return useSyncExternalStore(runtime?.subscribe ?? NOOP_SUBSCRIBE, getSnapshot, getSnapshot);
+	const services = useSyncExternalStore(runtime?.subscribe ?? NOOP_SUBSCRIBE, getSnapshot, getSnapshot);
+	return useMemo(() => (services && sessionId ? sessionDirectoryServices(services, desktopApi, sessionId, record?.workspacePath) : services), [services, sessionId, record?.workspacePath]);
 }

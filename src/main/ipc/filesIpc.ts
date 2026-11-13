@@ -1,3 +1,4 @@
+import { parseProjectDirectoryRequest, resolveSessionDirectory, type FileSessionRecord } from "../files/sessionDirectoryRequest";
 import { ipcMain, shell, type IpcMainInvokeEvent } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import { relative } from "node:path";
@@ -37,6 +38,7 @@ import type { WslHelperSessionPool, WslHelperSessionTarget } from "../wsl/WslHel
 const MAX_BINARY_PREVIEW_BYTES = 64 * 1024 * 1024;
 
 export type FilesIpcDeps = {
+	getSession?: (sessionId: string) => FileSessionRecord | undefined;
 	fileSystemService: FileSystemService;
 	projectStore: ProjectStore;
 	settingsStore: SettingsStore;
@@ -50,16 +52,8 @@ export type FilesIpcDeps = {
 	 */
 	remoteFiles?: {
 		directoryPage(projectId: string, path: string, force?: boolean): Promise<ProjectDirectoryPageResult>;
-		/**
-		 * 远端文件名搜索（收口第一片）：`files:search-page` 按位置路由到这里。
-		 * 未装配时该通道对 ssh 项目返回稳定码，不静默回退本机。
-		 */
 		searchProject?(projectId: string, path: string, query: string): Promise<RemoteProjectSearchResult>;
 		pathsExist(projectId: string, paths: readonly string[]): Promise<ProjectPathsExistResult>;
-		/**
-		 * 远端内容搜索：按连接 hello 的 `fs.searchContent` 能力路由，旧 helper 返回 `{ok:true,value:null}`
-		 * 而不是失败——"这个位置只支持文件名"是能力边界，不是错误。未装配该方法时同样按不支持处理。
-		 */
 		searchContent?(projectId: string, query: string): Promise<{ ok: true; value: FileContentSearchResult | null } | { ok: false; code: string }>;
 		/** 远端正文读/写（中央编辑器用）：与抽屉编辑器共用同一份远端文本服务与令牌表。 */
 		openText?(senderId: number, projectId: string, path: string): Promise<{ content: string; version?: string }>;
@@ -121,7 +115,7 @@ function parseOptionalMaxBytes(value: unknown): number | undefined {
 	return value;
 }
 
-export function registerFilesIpc({ fileSystemService, projectStore, settingsStore, getFileIndexService, appLogger, openExternalUrl, remoteFiles, remoteEntries, wslHelperPool, checkIgnore }: FilesIpcDeps): void {
+export function registerFilesIpc({ fileSystemService, projectStore, settingsStore, getFileIndexService, appLogger, openExternalUrl, remoteFiles, remoteEntries, wslHelperPool, checkIgnore, getSession }: FilesIpcDeps): void {
 	registerFilesSystemIpc({ settingsStore, openExternalUrl });
 	/**
 	 * 公共写面的统一信封（P1-1）：成功 `opOk`，失败用稳定码 + 由闭集推出的 `outcome`。
@@ -161,9 +155,6 @@ export function registerFilesIpc({ fileSystemService, projectStore, settingsStor
 			return toWindowsPath(project.path, project);
 		},
 	});
-	// 文件抽屉的 skipGeneratedDirs 需要透传到 FileSystemService.listTree 的第 4 个选项；
-	// 共享 ProjectFileBackend 契约暂不含 list options，这里用同一 local backend 的包装实例承接，
-	// 只有 list 路径用得到它（远端 backend 尚未实现该开关，路由仍先经 forProject 拒绝非本地）。
 	const localProjectFileBackendWithSkippedGeneratedDirs = new LocalProjectFileBackend({
 		fileSystemService: {
 			listTree: (root, maxDepth, directory) => fileSystemService.listTree(root, maxDepth, directory, { skipGeneratedDirs: true }),
@@ -214,11 +205,6 @@ export function registerFilesIpc({ fileSystemService, projectStore, settingsStor
 		wslProjectFileBackend,
 	);
 
-	/**
-	 * issue #426：`~` 必须在落到 fs.* / shell.* 之前展开成家目录绝对路径。
-	 * renderer 侧的裸路径可能直接来自模型回复（`~/桌面/x.html`），此前原样进 stat 必然 ENOENT。
-	 * 顺序：先展开（WSL 下拿到发行版内 home），再 toWindowsPath 转 UNC。
-	 */
 	const expandHome = (path: string): string => expandHomeForFileAccess(path, settingsStore.get());
 
 	const fileBackendForTargets = (targets: ProjectFileTarget[]) => {
@@ -323,7 +309,13 @@ export function registerFilesIpc({ fileSystemService, projectStore, settingsStor
 		if (options !== undefined && (!isRecord(options) || Object.keys(options).some((key) => key !== "force") || (options.force !== undefined && typeof options.force !== "boolean"))) return opFailFromCode("INVALID_FILE_LIST_OPTIONS");
 		let target: ProjectFileTarget;
 		try {
-			target = parseProjectFileTarget(targetValue);
+			const request = parseProjectDirectoryRequest(targetValue);
+			target = parseProjectFileTarget({ projectId: request.projectId, relativePath: request.relativePath });
+			if (request.sessionId !== undefined) {
+				const project = localProject(request.projectId);
+				if (!project) throw new Error("PROJECT_NOT_FOUND");
+				target = (await resolveSessionDirectory(request, toWindowsPath(project.path, project), getSession)).target;
+			}
 		} catch (error) {
 			return opFailFromCode(codeOf(error, "INVALID_PROJECT_FILE_TARGET"));
 		}
@@ -332,11 +324,8 @@ export function registerFilesIpc({ fileSystemService, projectStore, settingsStor
 			if (!remoteFiles) return opFailFromCode("UNSUPPORTED_PROJECT_LOCATION");
 			return await remoteFiles.directoryPage(target.projectId, target.relativePath, isRecord(options) && options.force === true);
 		}
-		// 与 list 同一条翻译口径：已展开的子目录在切换项目后才被删除（目录清理 / worktree 切换）是常态，
-		// 目录页返回空页让节点自然落空；只有根目录缺失才是 PROJECT_DIRECTORY_MISSING，
-		// 否则渲染层会把它当成「项目目录不存在」弹 toast 并刷新项目列表。
+		// 消失的子目录返回空页；只有根缺失才提示项目目录不存在。
 		try {
-			// 本地与 WSL 共用同一份目录页形状（单层、显式 truncated）；WSL 的读取由 backend 在发行版内完成。
 			const backend = projectFileBackendRouter.forProject(target.projectId);
 			if (backend.directoryPage === undefined) return opFailFromCode("UNSUPPORTED_PROJECT_LOCATION");
 			let page: Pick<ProjectDirectoryPage, "entries" | "truncated" | "totalEntries">;
@@ -391,15 +380,25 @@ export function registerFilesIpc({ fileSystemService, projectStore, settingsStor
 		return projectFileBackendRouter.forProject(rawProjectId).search(target, normalizedQuery);
 	};
 
-	/**
-	 * 公共文件名搜索页（位置分派收口第一片）：本机与远端同一形状，调用方不需要知道位置。
-	 *
-	 * 远端 `kind:"other"` 只留在 `entries`（不伪装成 file）；`truncated/scanned` 原样带出。
-	 * 本机不填这两个字段：没有就不冒充“完整”。兼容入口 `files:search` 仍保留（本机旧形状）。
-	 */
 	ipcMain.handle(ipcChannels.filesSearchPage, async (_event, rawProjectId: unknown, query: unknown): Promise<ProjectFileSearchPageResult> => {
 		try {
-			if (typeof rawProjectId !== "string" || !rawProjectId.trim() || rawProjectId.length > 256) return opFailFromCode("INVALID_PROJECT_FILE_TARGET");
+			if (typeof rawProjectId !== "string") {
+				const request = parseProjectDirectoryRequest(rawProjectId);
+				const project = localProject(request.projectId);
+				if (!project) return opFailFromCode("PROJECT_NOT_FOUND");
+				const { root } = await resolveSessionDirectory(request, toWindowsPath(project.path, project), getSession);
+				const boundary = await createProjectFileReadBoundary(toWindowsPath(project.path, project));
+				const results = await fileSystemService.searchNames(root, parseFileSearchQuery(query));
+				return opOk(
+					projectFileSearchPageFromLocal(
+						results.map((entry) => {
+							const relativePath = relative(boundary.canonicalRoot, entry.path ?? resolveLocalProjectFileTarget(root, entry.relativePath)).replace(/\\/g, "/");
+							return { ...entry, relativePath, target: { projectId: request.projectId, relativePath } };
+						}),
+					),
+				);
+			}
+			if (!rawProjectId.trim() || rawProjectId.length > 256) return opFailFromCode("INVALID_PROJECT_FILE_TARGET");
 			const normalizedQuery = parseFileSearchQuery(query);
 			const project = projectStore.get(rawProjectId);
 			if (!project) return opFailFromCode("PROJECT_NOT_FOUND");

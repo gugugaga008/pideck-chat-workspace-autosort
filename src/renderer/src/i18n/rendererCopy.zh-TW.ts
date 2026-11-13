@@ -2,7 +2,7 @@
  * 本文件由 `node scripts/genZhTwCopy.mjs` 生成，请勿手改。
  * 文案改动请修改对应的 zh-CN 源文件后重新生成；转换规则见该脚本的 OVERRIDES。
  * 注释刻意保留简体：属于开发者视角文本，不面向用户。
- * source-sha256: e32cb71029e00b21e6aa26d99fe86d1beed1ea94d4c58e5730123023f9be9dbe（来自 src/renderer/src/i18n/rendererCopy.zh-CN.ts 的词典区块指纹，由 tests/zhTwCopy.test.mjs 校验新鲜度）
+ * source-sha256: 1d7eaf8e856f65b9da31c45c26ce0156d3df317cffcf64f55b652d6e9274c15b（来自 src/renderer/src/i18n/rendererCopy.zh-CN.ts 的词典区块指纹，由 tests/zhTwCopy.test.mjs 校验新鲜度）
  */
 import { mainProcessZhTW } from "../../../shared/i18n/mainProcessCopy.zh-TW";
 import type { TranslationKey } from "./rendererCopy.zh-CN";
@@ -94,6 +94,9 @@ export const zhTW: Record<TranslationKey, string> = {
 	"hostPlugins.networkLocalWarning": "本地埠不等於可信服務。請核對監聽該埠的程式和它的介面；PiDeck 不會啟動它，也不會附帶瀏覽器 Cookie 或應用憑據。",
 	"hostPlugins.serviceLocal": "啟停指定本地服務",
 	"hostPlugins.scaffoldServiceLocalHint": "只允許啟停 PiDeck 已實現介面卡的本地服務（如 billion-context），並讓 PiDeck 用內建瀏覽器開啟它的 Web 面板。命令、引數和埠都由 PiDeck 決定，外掛只能點名服務。",
+	"hostPlugins.chatWorkspaceManage": "管理聊天目錄自動分類",
+	"hostPlugins.chatWorkspaceManageHint": "讀取並修改主程序的新聊天目錄自動分類開關，關閉外掛面板後仍生效。根目錄由宿主固定，舊會話不移動；不能指定路徑、修改會話或執行命令。僅支援此能力的定製宿主可用。",
+	"hostPlugins.chipChatWorkspace": "聊天目錄分類",
 	"hostPlugins.sessionGroupsManage": "讀寫會話分組",
 	"hostPlugins.sessionGroupsManageHint": "讀寫宿主的會話分組資料（分組名、顏色、會話引用與目錄範圍）。側欄分組樹消費同一份資料，這裡的修改會即時反映到側欄；不涉及會話正文。",
 	"hostPlugins.serviceDestinations": "可控制的本地服務（其他服務不可訪問）",

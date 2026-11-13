@@ -32,6 +32,7 @@ export function sameSessionRecord(a: SessionRecord, b: SessionRecord): boolean {
 		a.parentSessionId === b.parentSessionId &&
 		a.parentSessionPath === b.parentSessionPath &&
 		a.projectPath === b.projectPath &&
+		a.workspacePath === b.workspacePath &&
 		a.preview === b.preview &&
 		a.messageCount === b.messageCount &&
 		a.status === b.status &&

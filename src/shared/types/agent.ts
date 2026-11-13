@@ -398,6 +398,8 @@ export type CreateAgentInput = {
 	 * 与 pi 进程自身的 sessionId（AgentTab.sessionId / piSessionId）语义不同，不可混用。
 	 */
 	deckSessionId?: string;
+	/** Host-only cwd override, resolved from persisted catalog by the coordinator. */
+	workspacePath?: string;
 	/** standby 池预热 spawn：不绑定会话、不注入 PIDECK_SESSION_ID，创建后由 StandbyAgentPool 托管（仅 AgentManager 内部使用）。 */
 	standby?: boolean;
 	environment?: SessionEnvironment;

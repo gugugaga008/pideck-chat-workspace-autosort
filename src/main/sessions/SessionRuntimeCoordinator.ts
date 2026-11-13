@@ -1,3 +1,4 @@
+import type { ChatWorkspaceRuntimePort } from "./ChatWorkspaceService";
 import type {
 	AgentBackend,
 	AgentGatewayCapability,
@@ -378,6 +379,7 @@ export class SessionRuntimeCoordinator {
 		private readonly logger?: SessionRuntimeLogger,
 		private readonly resolveProjectLocator?: SessionProjectLocatorResolver,
 		private readonly resolveRemoteMessageMutation?: RemoteSessionMessageMutationResolver,
+		private readonly chatWorkspace?: ChatWorkspaceRuntimePort,
 	) {}
 
 	/** 渲染层在 currentSessionId 变化时汇报聚焦会话（见 sessions:set-focused-session IPC）。 */
@@ -1502,7 +1504,7 @@ export class SessionRuntimeCoordinator {
 				sessionId: input.sessionId,
 				requestId: input.requestId,
 			});
-			tab = await this.ensureRuntime(input.sessionId);
+			tab = await this.ensureRuntime(input.sessionId, input.message);
 			void this.logger?.info("session-perf", "Runtime activation completed", {
 				sessionId: input.sessionId,
 				requestId: input.requestId,
@@ -1621,14 +1623,14 @@ export class SessionRuntimeCoordinator {
 		}
 	}
 
-	private ensureRuntime(sessionId: string): Promise<AgentTab> {
+	private ensureRuntime(sessionId: string, firstPrompt?: string): Promise<AgentTab> {
 		// #354：渲染层可能还抱着已被身份归并的历史会话 ID（持久化置顶/Tab 引用迁移到位前的
 		// 迟到请求）。先进原有激活/绑定状态机前统一归一化，否则同一会话会在旧 ID 上另起一个
 		// runtime（两个进程、两份历史，且旧 ID 在 catalog 里已经不存在）。
 		const canonicalSessionId = this.canonicalSessionId(sessionId);
 		const existing = this.activationBySession.get(canonicalSessionId);
 		if (existing) return existing;
-		const activation = this.activate(canonicalSessionId).finally(() => {
+		const activation = this.activate(canonicalSessionId, firstPrompt).finally(() => {
 			this.activationBySession.delete(canonicalSessionId);
 		});
 		this.activationBySession.set(canonicalSessionId, activation);
@@ -1646,7 +1648,7 @@ export class SessionRuntimeCoordinator {
 		return sessionId === target.sessionId ? target : { ...target, sessionId };
 	}
 
-	private async activate(sessionId: string): Promise<AgentTab> {
+	private async activate(sessionId: string, firstPrompt?: string): Promise<AgentTab> {
 		if (this.deletingSessions.has(sessionId)) {
 			throw new Error(`Session is being deleted: ${sessionId}`);
 		}
@@ -1704,6 +1706,7 @@ export class SessionRuntimeCoordinator {
 		}
 		if (tab?.status === "starting") tab = await this.waitUntilReady(tab);
 
+		const workspacePath = !tab ? await this.chatWorkspace?.prepare(entry, firstPrompt) : undefined;
 		const created = !tab;
 		if (!tab) {
 			// standby 池认领（仅 pi 网关实现，其余返回 null）：只服务「无既有会话文件」的新会话——
@@ -1711,7 +1714,7 @@ export class SessionRuntimeCoordinator {
 			// 认领到的进程模型/扩展是 spawn 时快照：模型/思考档由下面的 applyLatestPreferences
 			// 按 catalog 最新值热补；扩展/代理等 spawn-only 输入靠 AgentManager 的指纹比对，
 			// 不一致根本不会被认领。created 保持 true：认领的进程归本次激活所有，失败清理必须能停掉它。
-			if (entry.backend !== "dsh" && entry.backend !== "acp" && !entry.filePath) {
+			if (!workspacePath && entry.backend !== "dsh" && entry.backend !== "acp" && !entry.filePath) {
 				tab = (await this.agents.claimStandbyAgent?.({ projectId: entry.projectId, sessionId, noSession: entry.noSession }).catch(() => null)) ?? undefined;
 			}
 		}
@@ -1721,6 +1724,7 @@ export class SessionRuntimeCoordinator {
 			tab = await this.agents.create({
 				projectId: entry.projectId,
 				title: entry.title,
+				workspacePath,
 				deckSessionId: sessionId,
 				// ssh locator **不得**交给 `SessionLocatorRouter`（它对 ssh 抛 `UNSUPPORTED_PROJECT_LOCATION`）：
 				// 远端运行时位置由项目 locator + 注入端口决定，会话文件只经 `sessionPath` 表达。

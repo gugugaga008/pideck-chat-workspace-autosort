@@ -67,14 +67,10 @@ export type SessionTitleOrigin = "fallback" | "auto" | "manual" | "legacy";
 export type SessionCatalogEntry = {
 	id: string;
 	projectId: string;
+	workspacePath?: string; // Host-owned stable cwd, independent of pi's session log location.
 	originKey?: string;
 	title: string;
-	/**
-	 * PiDeck owns the display title once this is true. Only an unclaimed fresh
-	 * provisional title may accept one automatic or initial JSONL title; pi JSONL/TUI
-	 * changes never overwrite an owned catalog title.
-	 * titleOrigin 存在时它才是所有权来源的权威，本字段仅作镜像（旧读取路径兼容）。
-	 */
+	/** PiDeck-owned display title; titleOrigin is authoritative, titleLocked mirrors it for older readers. */
 	titleLocked?: boolean;
 	/** 标题所有权来源；见 SessionTitleOrigin。 */
 	titleOrigin?: SessionTitleOrigin;
@@ -897,20 +893,11 @@ export class SessionCatalog implements HostRebindStorePort {
 				void getAppLogger()?.error("session-catalog", "Catalog and backup both failed to load", { primary: read.primary, backup: read.backup });
 			}
 		}
-		// Draft 只代表当前进程中的“尚未发送”编辑面：没有用户消息就没有
-		// 可恢复的 Pi session。重启时清掉它们（仅限 pi 后端），避免空 Agent 在
-		// 历史列表中永久残留。
-		// 例外：DSH 会话的草稿必须保留。DSH 的 host 会话数据由 $DSH_HOME 持久化，
-		// catalog 只是 id 映射；即使“创建后激活链路未走完”（attachRuntime 未把
-		// status 置 active），重启后用户仍应在侧栏看到并重新激活它。若在此清掉，
-		// host 侧会话会变成孤儿且无法从侧栏访问。带 dshSessionId 的异常中间态同样保留。
-		/** 本次加载是否改动了内容：决定要不要走一次归一化写事务（没改就一个字节都不写）。 */
+		// Keep host-backed and workspace-bound drafts: their persisted identity must survive a crash before sending.
 		let migrated = false;
-		// ACP 同理（StaleDraftReaper 的 acp 豁免、Coordinator 激活失败兑底的
-		// draft+acpSessionId 中间态都依赖该保留语义，清单除即 agent 侧孤儿化）。
-		const staleDrafts = this.entries.filter((entry) => entry.status === "draft" && entry.backend !== "dsh" && entry.backend !== "acp");
+		const staleDrafts = this.entries.filter((entry) => entry.status === "draft" && !entry.workspacePath && entry.backend !== "dsh" && entry.backend !== "acp");
 		if (staleDrafts.length > 0) {
-			this.entries = this.entries.filter((entry) => entry.status !== "draft" || entry.backend === "dsh" || entry.backend === "acp");
+			this.entries = this.entries.filter((entry) => entry.status !== "draft" || entry.workspacePath || entry.backend === "dsh" || entry.backend === "acp");
 			migrated = true;
 		}
 
@@ -1341,6 +1328,8 @@ export class SessionCatalog implements HostRebindStorePort {
 		source: SessionSource;
 		environment: SessionEnvironment;
 		filePath: string;
+		/** Host-only inheritance when pi forks an already isolated chat runtime. */
+		workspacePath?: string;
 		wslDistro?: string;
 		wslUser?: string;
 		importedSourceId?: string;
@@ -1386,10 +1375,12 @@ export class SessionCatalog implements HostRebindStorePort {
 				);
 			});
 			const now = Date.now();
+			const workspacePath = input.projectId === "builtin-chat" && input.source === "pi" && input.environment === "native" ? input.workspacePath : undefined;
 			if (!entry) {
 				entry = {
 					id: randomUUID(),
 					projectId: input.projectId,
+					workspacePath,
 					originKey,
 					title: input.title,
 					titleLocked: true,
@@ -1413,6 +1404,7 @@ export class SessionCatalog implements HostRebindStorePort {
 				entries.push(entry);
 			} else {
 				entry.projectId = input.projectId;
+				entry.workspacePath ??= workspacePath;
 				entry.originKey = originKey;
 				entry.source = input.source;
 				entry.environment = input.environment;
@@ -2524,6 +2516,18 @@ export class SessionCatalog implements HostRebindStorePort {
 		});
 	}
 
+	/** Bind once through the host service, without exposing a general renderer path setter. */
+	async bindWorkspacePath(id: string, workspacePath: string): Promise<string> {
+		this.assertLoaded();
+		return this.enqueueMutation((entries) => {
+			const entry = this.requireEntry(entries, id);
+			if (entry.workspacePath) return { value: entry.workspacePath, changed: false };
+			if (entry.status !== "draft" || entry.filePath || entry.importedSourceId || entry.noSession || entry.source !== "pi" || entry.environment !== "native" || (entry.backend && entry.backend !== "pi") || entry.locator?.kind === "ssh") throw new Error("Session is not eligible for a chat workspace");
+			entry.workspacePath = workspacePath;
+			return { value: workspacePath, changed: true };
+		});
+	}
+
 	private recordFromEntry(entry: SessionCatalogEntry, summary?: SessionSummary): SessionRecord {
 		const locator = this.sessionLocatorForEntry(entry, summary);
 		const recordSummary = locator?.kind === "ssh" ? undefined : summary;
@@ -2546,6 +2550,7 @@ export class SessionCatalog implements HostRebindStorePort {
 			forked: entry.forked,
 			supersededBy: entry.supersededBy,
 			mergedSessionIds: entry.mergedSessionIds ? [...entry.mergedSessionIds] : undefined,
+			workspacePath: entry.workspacePath,
 			projectPath: locator?.kind === "ssh" ? undefined : recordSummary?.projectPath,
 			preview: recordSummary?.preview ?? "",
 			messageCount: recordSummary?.messageCount ?? 0,

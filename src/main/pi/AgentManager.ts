@@ -2382,7 +2382,7 @@ export class AgentManager {
 		const tab: AgentTab = {
 			id,
 			projectId: project.id,
-			cwd: project.path,
+			cwd: input.workspacePath ?? project.path,
 			title: input.title || `${project.name} agent`,
 			status: "starting",
 			deckSessionId: input.deckSessionId,
@@ -2408,14 +2408,14 @@ export class AgentManager {
 		// 第 12 步：WSL 会话把档案里的 distro/user 作为本次 spawn 的覆盖值，
 		// 让 PiProcess 用正确发行版解析命令与路径；缺字段才回退全局设置。
 		const wslSpawnOverride = sessionEnvironment === "wsl" && tab.wslDistro !== undefined && tab.wslUser !== undefined ? { wslEnabled: true, wslDistro: tab.wslDistro, wslUser: tab.wslUser } : undefined;
-		this.agents.set(id, { tab, process: this.createPiProcess(project.path, input.sessionPath, input.deckSessionId, wslSpawnOverride, id) });
+		this.agents.set(id, { tab, process: this.createPiProcess(tab.cwd, input.sessionPath, input.deckSessionId, wslSpawnOverride, id) });
 		this.messages.set(id, []);
 		this.emitState();
 
 		let handshake: Awaited<ReturnType<AgentManager["handshakePiProcess"]>>;
 		try {
 			handshake = await this.handshakePiProcess(id, {
-				projectPath: project.path,
+				projectPath: tab.cwd,
 				sessionPath: input.sessionPath,
 				deckSessionId: input.deckSessionId,
 				trustOverride,
@@ -2467,7 +2467,7 @@ export class AgentManager {
 			});
 			const data = state.data as { sessionId?: string; sessionFile?: string; sessionName?: string } | undefined;
 			tab.sessionId = data?.sessionId;
-			tab.sessionPath = this.normalizeSessionPathFromPi(data?.sessionFile ?? input.sessionPath, project.path, sessionEnvironment);
+			tab.sessionPath = this.normalizeSessionPathFromPi(data?.sessionFile ?? input.sessionPath, tab.cwd, sessionEnvironment);
 			const piSessionName = data?.sessionName && !looksLikePiSessionFileStem(data.sessionName) ? data.sessionName : undefined;
 			tab.title = input.title || piSessionName || (input.sessionPath ? this.translate("session.historyTitle", { project: project.name }) : `${project.name} agent`);
 			tab.status = "idle";
@@ -2563,7 +2563,7 @@ export class AgentManager {
 		const state = await runtime.process.client.request({ type: "get_state" }, 10_000).catch(() => ({ data: undefined }));
 		const data = state.data as { sessionId?: string; sessionFile?: string; sessionName?: string } | undefined;
 		runtime.tab.sessionId = data?.sessionId ?? runtime.tab.sessionId;
-		runtime.tab.sessionPath = this.reportSessionPathFromPi(data?.sessionFile ?? runtime.tab.sessionPath, runtime.tab.projectId, runtime.tab.sessionEnvironment ?? "native", this.getProject(runtime.tab.projectId)?.path ?? runtime.tab.cwd);
+		runtime.tab.sessionPath = this.reportSessionPathFromPi(data?.sessionFile ?? runtime.tab.sessionPath, runtime.tab.projectId, runtime.tab.sessionEnvironment ?? "native", runtime.tab.cwd);
 		this.applyRuntimeTitle(agentId, data?.sessionName || runtime.tab.title, false);
 		this.emitState();
 		return runtime.tab;
@@ -3482,7 +3482,7 @@ export class AgentManager {
 		const handshake = await this.handshakePiProcess(agentId, {
 			// 远端：`projectPath` 的消费者只有日志与生命周期事件归属，不是本机文件路径——create 同样
 			// 传远端 cwd（`project.path` 在远端项目上不存在，也不再能靠 `isLocalProject` 收窄）。
-			projectPath: isRemote ? runtime.tab.cwd : project.path,
+			projectPath: runtime.tab.cwd,
 			sessionPath,
 			deckSessionId: runtime.tab.deckSessionId,
 			onExit: (payload) => this.handleReattachProcessExit(agentId, runtime, payload),
@@ -3504,7 +3504,7 @@ export class AgentManager {
 			runtime.tab.sessionId = data?.sessionId ?? runtime.tab.sessionId;
 			// 远端：pi 报回来的会话文件是**远端路径**，原样采用（create 路径同样如此）——用本机规则归一化
 			// 会把它改成本机风格路径，下一次 spawn 的 `--session` 就找不到文件了。
-			runtime.tab.sessionPath = isRemote ? (data?.sessionFile ?? sessionPath) : this.normalizeSessionPathFromPi(data?.sessionFile ?? sessionPath, project.path, runtime.tab.sessionEnvironment ?? "native");
+			runtime.tab.sessionPath = isRemote ? (data?.sessionFile ?? sessionPath) : this.normalizeSessionPathFromPi(data?.sessionFile ?? sessionPath, runtime.tab.cwd, runtime.tab.sessionEnvironment ?? "native");
 			runtime.tab.status = "idle";
 			// 进程退出型压缩可能来不及发 compaction_end；重连成功即表示 Pi 已可继续接收消息。
 			this.rpcCompactingAgents.delete(agentId);
@@ -4453,7 +4453,7 @@ export class AgentManager {
 					},
 					this.rpcTimeoutMs,
 				);
-				sessionPath = this.reportSessionPathFromPi((state.data as { sessionFile?: string } | undefined)?.sessionFile ?? undefined, runtime.tab.projectId, environment ?? "native", this.getProject(runtime.tab.projectId)?.path ?? runtime.tab.cwd);
+				sessionPath = this.reportSessionPathFromPi((state.data as { sessionFile?: string } | undefined)?.sessionFile ?? undefined, runtime.tab.projectId, environment ?? "native", runtime.tab.cwd);
 			} catch {
 				// 获取失败时继续用 undefined，create 会启动新 session
 			}
@@ -4672,7 +4672,7 @@ export class AgentManager {
 		const stateResponse = await runtime.process.client.request({ type: "get_state" }, this.rpcTimeoutMs).catch(() => ({ data: undefined }));
 		const state = stateResponse.data as { sessionId?: string; sessionFile?: string; sessionName?: string } | undefined;
 		if (state?.sessionFile) {
-			runtime.tab.sessionPath = this.reportSessionPathFromPi(state.sessionFile, runtime.tab.projectId, runtime.tab.sessionEnvironment ?? "native", this.getProject(runtime.tab.projectId)?.path ?? runtime.tab.cwd) ?? runtime.tab.sessionPath;
+			runtime.tab.sessionPath = this.reportSessionPathFromPi(state.sessionFile, runtime.tab.projectId, runtime.tab.sessionEnvironment ?? "native", runtime.tab.cwd) ?? runtime.tab.sessionPath;
 		}
 		if (state?.sessionId) runtime.tab.sessionId = state.sessionId;
 		// Preserve optimistic/in-flight messages during the local history projection.

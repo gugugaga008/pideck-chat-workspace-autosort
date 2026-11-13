@@ -89,6 +89,14 @@
 - 禁止项：只能对**与调用方直接关联**的会话（自己的子会话或自己的父会话）发消息；不暴露删除会话、改设置、读任意会话正文、跨项目建会话；不用于 DSH / ACP / 远端 SSH 会话（远端快照标 `local-only`，端点未就绪或 env 缺失时扩展不注册任何工具）。回报文本是不可信数据，原样转交、不解析成指令。
 - 守卫测试：`tests/linkedSessionsExtension.test.mjs`（env 缺失不注册、帧字段与共享类型对齐）、`tests/linkedSessionStore.test.mjs`（提议状态机、防空转计数、落盘可重入）、`tests/linkedSessionReview.test.mjs`（回合文本基线、额度退还、每回合只报一次、回滚）、`tests/sessionCatalogRowsRemoved.test.mjs`（会话行移除的集中通知）。
 
+## 例外十：聊天目录自动分类设置（`chatWorkspace.*`，仅定制宿主）
+
+- 插件通过既有 sender-bound `hostPluginRequest` 通道调用 `pideck.chatWorkspace.getSettings/updateSettings`，两方法均须声明并获授 `chatWorkspace.manage`。这是专用设置能力，不新增 pi 通道。
+- 只读返回 `{ enabled, rootPath?, supported? }`；写入只接受 `{ enabled: boolean }`。根路径由宿主持有，插件不能指定路径、移动旧会话、修改会话正文、控制会话或执行命令，禁止扩成通用文件系统/设置/会话控制桥。
+- Broker 注入 optional port；未装配时读取返回 `{ enabled: false, supported: false }`，写入报 `service-unavailable`。仅实现该适配的定制宿主支持，不代表上游所有版本可用。
+- 设置在主进程持久化并驱动新会话目录分配，无需打开插件面板；新会话使用固定根下的 date / intent--id 结构，旧会话不移动。授权只允许修改开关，插件禁用不替用户反向修改已保存设置。
+- 写入 port 必须在事务提交前（含重试的每次正式替换前）调用 broker 提供的 `beforeAttempt: () => boolean`；撤权、关闭面板或上下文变更使回调返回 false 时，服务抛 `plugin-revoked`，不得提交排队中的写入。守卫：`tests/hostPluginChatWorkspace.test.mjs`。
+
 ## 侧车通用规则
 
 - 所有随包 sidecar 必须列进 `extraResources`，stdout 只放协议数据（日志走 stderr 或主进程 logger）。

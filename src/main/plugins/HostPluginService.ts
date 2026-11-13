@@ -1,4 +1,5 @@
 /** Assembles independent plugin discovery, data capabilities and views; no pi runtime dependency. */
+import type { ChatWorkspaceSettingsPort } from "../../shared/chatWorkspace";
 import { join } from "node:path";
 import type { HostPluginCatalog, HostPluginContext, HostPluginMountInput } from "../../shared/types/hostPlugin";
 import type { SessionCatalog } from "../sessions/SessionCatalog";
@@ -29,11 +30,13 @@ export class HostPluginService {
 		projectOf?: (projectId: string) => HostPluginProjectInfo | undefined,
 		/** 会话分组 store（惰性求值）：声明 sessionGroups.manage 的插件经 broker 读写它。 */
 		sessionGroups?: () => SessionGroupStore | undefined,
+		/** 定制宿主可注入主进程聊天目录设置；未装配时不支持该能力。 */
+		chatWorkspace?: ChatWorkspaceSettingsPort,
 	) {
 		this.manager = new HostPluginManager(userData, process.env.PIDECK_DISABLE_HOST_PLUGINS === "1");
 		this.sessions = new HostPluginSessions(catalog, projectOf);
 		this.storage = new HostPluginStorage(join(userData, "host-plugin-storage"));
-		this.broker = new HostPluginBroker(this.manager, this.sessions, this.storage, (projectId) => projectOf?.(projectId)?.name, undefined, services, sessionGroups);
+		this.broker = new HostPluginBroker(this.manager, this.sessions, this.storage, (projectId) => projectOf?.(projectId)?.name, undefined, services, sessionGroups, chatWorkspace);
 	}
 
 	/** 插件目录一个都不随包：扫描用户自己装的那些，没有就空着。 */

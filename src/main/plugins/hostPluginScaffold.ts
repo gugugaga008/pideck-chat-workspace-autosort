@@ -7,6 +7,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { HostPluginPermission, HostPluginScaffoldInput } from "../../shared/types/hostPlugin";
 import { isHostPluginId, isPluginRecord, parseHostPluginManifest } from "./hostPluginManifest";
+import { scaffoldChatWorkspaceDemo } from "./hostPluginScaffoldChatWorkspace";
 import { scaffoldNetworkDemo } from "./hostPluginScaffoldNetwork";
 
 const NOTICE = "由 PiDeck 脚手架生成；改完点「重新扫描」，授权指纹会随之失效，需要重新确认。";
@@ -38,6 +39,7 @@ function manifestJson(input: HostPluginScaffoldInput): string {
 function appHtml(input: HostPluginScaffoldInput): string {
 	const permissions = input.permissions;
 	const network = scaffoldNetworkDemo(input);
+	const chatWorkspace = scaffoldChatWorkspaceDemo(input);
 	// 未声明的权限不生成对应界面：模板与 manifest 的 permissions 始终一致（与代码块同一规则）。
 	const readsSessions = permissions.includes("sessions.read");
 	const search = readsSessions ? '      <input id="search" type="search" autocomplete="off" />\n' : "";
@@ -59,7 +61,7 @@ function appHtml(input: HostPluginScaffoldInput): string {
 ${search}${permissions.includes("workbench.openExternal") ? '      <button id="guide" type="button" class="ghost"></button>\n' : ""}    </header>
     <main>
 ${main}      <section id="detail" class="detail"></section>
-${network.html}    </main>
+${network.html}${chatWorkspace.html}    </main>
     <p id="status" class="status" role="status"></p>
     <script type="module" src="app.js"></script>
   </body>
@@ -115,6 +117,7 @@ function guideWiring(permissions: HostPluginPermission[]): string {
 function appJs(input: HostPluginScaffoldInput): string {
 	const navigate = navigateBlock(input.permissions);
 	const network = scaffoldNetworkDemo(input);
+	const chatWorkspace = scaffoldChatWorkspaceDemo(input);
 	// sessions.read 是模板主体（会话列表与历史）：没声明就整块不生成，避免生成一份必然报权限错的示例。
 	const readsSessions = input.permissions.includes("sessions.read");
 	// 范围由 manifest 决定：同一个 list() 在工作区声明下会跨项目返回，这里只改注释免得误导。
@@ -125,8 +128,8 @@ ${scopeNote}
 const pideck = window.pideck;
 
 const copy = {
-  "zh-CN": { title: "${input.name}", search: "搜索会话标题…", empty: "当前项目还没有已保存的会话。", more: "加载更多", loading: "读取中…", open: "在 PiDeck 中打开", last: "上次查看", guide: "开发指南", noPermission: "这个示例没有声明 sessions.read：只演示 context（项目/会话/语言/主题）与 storage。" },
-  "en-US": { title: "${input.name}", search: "Search session titles…", empty: "No saved sessions in this project yet.", more: "Load more", loading: "Loading…", open: "Open in PiDeck", last: "Last viewed", guide: "Developer guide", noPermission: "This sample declares no sessions.read: it only demonstrates context (project/session/locale/theme) and storage." },
+  "zh-CN": { title: "${input.name}", search: "搜索会话标题…", empty: "当前项目还没有已保存的会话。", more: "加载更多", loading: "读取中…", open: "在 PiDeck 中打开", last: "上次查看", guide: "开发指南", noPermission: "这个示例没有声明 sessions.read；仅演示 context、storage 与已授权的其他能力。" },
+  "en-US": { title: "${input.name}", search: "Search session titles…", empty: "No saved sessions in this project yet.", more: "Load more", loading: "Loading…", open: "Open in PiDeck", last: "Last viewed", guide: "Developer guide", noPermission: "This sample declares no sessions.read; it demonstrates context, storage and other granted capabilities." },
 };
 
 const nodes = {
@@ -159,7 +162,7 @@ function renderContext(context) {
   if (document.getElementById("guide")) document.getElementById("guide").textContent = state.copy.guide;
 ${network.render}}
 
-${network.code}${
+${network.code}${chatWorkspace.code}${
 	readsSessions
 		? `
 function renderSessions() {
@@ -290,7 +293,7 @@ ${navigate.reveal}${externalLinkBlock(input.permissions)}async function main() {
     void loadSessions(0).catch(report);
   });
   nodes.search.addEventListener("input", () => void search(nodes.search.value.trim()).catch(report));
-${guideWiring(input.permissions)}${network.wiring}  await loadSessions(0);
+${guideWiring(input.permissions)}${network.wiring}${chatWorkspace.wiring}  await loadSessions(0);
 }
 
 main().catch(report);
@@ -305,7 +308,7 @@ async function main() {
   // 每插件 1 MiB 小存储：计数只是演示持久化，不需要任何权限。
   await pideck.storage.set("openCount", Number((await pideck.storage.get("openCount")) || 0) + 1);
   nodes.status.textContent = state.copy.noPermission;
-${guideWiring(input.permissions)}${network.wiring}}
+${guideWiring(input.permissions)}${network.wiring}${chatWorkspace.wiring}}
 
 ${externalLinkBlock(input.permissions)}main().catch(report);
 `
@@ -480,6 +483,7 @@ function readme(input: HostPluginScaffoldInput): string {
 		"- `pideck.storage.get/set/keys/remove`：每插件 1 MiB JSON 小存储",
 		"- `pideck.workbench.navigate(sessionId, entryId)`",
 	];
+	if (input.permissions.includes("chatWorkspace.manage")) lines.push("- `pideck.chatWorkspace.getSettings()` / `updateSettings({ enabled })`：仅定制宿主支持；主进程持久化新聊天目录自动分类开关，根不变、旧会话不移动，面板关闭仍生效；未支持时不模拟启用。");
 	if (input.permissions.includes("workbench.openExternal")) lines.push("- `pideck.workbench.openExternal(url)`：用系统浏览器打开 https 链接");
 	if (input.permissions.includes("sessions.read.workspace")) {
 		lines.push("- `sessions.read.workspace`：上面 `sessions.list/get/search/entries` 与 `workbench.navigate` 的范围是整个工作区（所有项目目录），不再是当前项目");

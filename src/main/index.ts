@@ -374,7 +374,9 @@ import { mergeCatalogModels } from "./pi/catalogModelsForValidation";
 import { pickStandbyWarmupProject } from "./pi/standbyWarmupTarget";
 import { createSessionModelPreference } from "../shared/modelDisplayName";
 import { modelThinkingLevelOf } from "../shared/modelThinkingLevels";
-import { SessionCatalog, canAttachRuntimeMetadata } from "./sessions/SessionCatalog";
+import { ChatWorkspaceService } from "./sessions/ChatWorkspaceService";
+import { createChatWorkspaceIntentGenerator } from "./sessions/chatWorkspaceIntent";
+import { SessionCatalog, canAttachRuntimeMetadata, type SessionCatalogEntry } from "./sessions/SessionCatalog";
 import { waitForSessionRunEnd } from "./sessions/sessionRunWaiter";
 import { aggregateDshProxyMode, buildHostProxyEnvPatch, resolveAcpProxySettings, resolveDshHostProxyMode, resolveEffectiveSessionProxyMode } from "./sessions/sessionProxyPolicy";
 import { SessionRuntimeCoordinator, type SessionRuntimeBinding } from "./sessions/SessionRuntimeCoordinator";
@@ -876,6 +878,7 @@ let agentProfileStore: AgentProfileStore | null = null;
 /** 收藏存储（<userData>/favorites.json）；null = 尚未初始化。 */
 let favoritesStore: FavoritesStore | null = null;
 /** 会话分组存储（<userData>/session-groups.json）；null = 尚未初始化。侧栏与插件经它共用一份数据。 */
+let chatWorkspaceService: ChatWorkspaceService;
 let sessionGroupStore: SessionGroupStore | null = null;
 /** 关联会话（子对话，docs/host-boundaries.md 例外九）：关系表 + 编排 + 回环端点。 */
 let linkedSessionStore: LinkedSessionStore | null = null;
@@ -887,6 +890,8 @@ let agentInvokeService: AgentInvokeService | null = null;
  * 单飞语义下共用会让预测把用户正在跑的增强打断（同 agentInvokeCompletionService 的理由）。
  */
 let promptSuggestionService: EnhancePromptService | null = null;
+/** 聊天目录短意图命名：与增强/预测同协议、独立实例，首次新聊天发送前按需调用。 */
+let chatWorkspaceIntentService: EnhancePromptService | null = null;
 /**
  * 智能体调用专用侧车实例。与提示词增强共用同一套 pi-enhance-host 协议，但必须是
  * **独立进程**：EnhancePromptService 是「新 run 打断旧 run」的单飞语义，共用实例会
@@ -1657,6 +1662,7 @@ async function copyCatalogSession(sessionId: string) {
 		source: entry.source,
 		environment: entry.environment,
 		filePath: result.sessionPath,
+		workspacePath: entry.workspacePath,
 		wslDistro: entry.wslDistro,
 		wslUser: entry.wslUser,
 		importedSourceId: entry.importedSourceId,
@@ -1703,6 +1709,16 @@ function resolveSessionExportDir(): string {
  * 模型优先级复用增强那一套解析：用户显式指定的增强模型 > 该会话记录的模型。
  * 都没有就拒绝——学习是可选增益，不能为了它去猜一个模型或退回某个默认供应商。
  */
+/** 短意图沿用增强模型的优先级：显式增强模型 > 会话记录模型；都没有就不猜。 */
+function resolveChatWorkspaceIntentModel(entry: SessionCatalogEntry) {
+	return (
+		resolveEnhanceTargetModel({
+			configured: settingsStore?.get().enhanceModel ?? null,
+			recordModel: entry.model ? { provider: entry.model.provider, modelId: entry.model.modelId } : undefined,
+		}) ?? undefined
+	);
+}
+
 function memoryLearnComplete(sessionId: string, input: { systemPrompt: string; text: string }): Promise<string> {
 	const service = agentMemoryLearnService;
 	if (!service) return Promise.reject(new Error("learn-service-unavailable"));
@@ -1847,13 +1863,12 @@ async function replaceAgentSession(agentId: string, replace: () => Promise<unkno
 				source: tab.sessionSource ?? originEntry?.source ?? "pi",
 				environment,
 				filePath: tab.sessionPath,
+				workspacePath: originEntry?.workspacePath,
 				wslDistro: tab.wslDistro ?? (environment === "wsl" ? originEntry?.wslDistro : undefined),
 				wslUser: tab.wslUser ?? (environment === "wsl" ? originEntry?.wslUser : undefined),
 				importedSourceId: tab.importedSourceId ?? originEntry?.importedSourceId,
 				piSessionId: tab.sessionId,
-				// fork/clone 产物同步落 fork 标记（fork 身份元数据；(fork) 标题后缀已物理写入
-				// 会话名，见上方 appendSessionForkSuffix）；开关由调用方按语义传入，
-				// switch_session / 历史会话换绑等不标记。
+				// fork/clone 身份沿用源工作目录；标题后缀由 rename 持久化。
 				forked: options?.markForked,
 				// 命令层权威标题：上面刚把 (fork) 名写进新会话文件，扫描竞态不得把标题留在正文兜底上。
 				titleAuthority: "command",
@@ -3531,7 +3546,7 @@ function resolveBuiltInExtensionRoots(): BuiltInExtensionPathRoots {
  * 一个独立进程（EnhancePromptService 的单飞语义是「新 run 打断旧 run」，共用实例会互相打断）。
  * resolveLaunch 现求值：用户改自定义 pi 路径后下次调用即生效，无需重启。
  */
-function createCompletionHelperService(namespace: "enhance" | "agent-invoke" | "suggest" | "agent-memory"): EnhancePromptService {
+function createCompletionHelperService(namespace: "enhance" | "agent-invoke" | "suggest" | "agent-memory" | "chat-workspace-intent"): EnhancePromptService {
 	const log = (level: "debug" | "info" | "warn" | "error", message: string) => void appLogger?.[level](namespace, message);
 	return new EnhancePromptService({
 		// 侧车是常驻单进程，env 在 spawn 时固定，所以代理只能在这里落地：
@@ -4090,6 +4105,7 @@ function registerIpc() {
 			return { name: project.name, directory: "locator" in project ? project.locator.remotePath : project.path };
 		},
 		() => sessionGroupStore ?? undefined,
+		chatWorkspaceService,
 	);
 	const unregisterHostPlugins = registerHostPluginsIpc(hostPlugins, () => mainWindow);
 	const mcpWarning = (code: string) => {
@@ -5556,7 +5572,7 @@ function registerIpc() {
 		fileSystemService,
 		projectStore,
 		settingsStore,
-		// 文件索引 sidecar 在下方 sidecar 装配区创建，这里用 getter 取（注册时序不受影响）
+		getSession: (id) => sessionCatalog.get(id),
 		getFileIndexService: () => fileIndexService,
 		appLogger,
 		openExternalUrl,
@@ -5840,6 +5856,9 @@ app
 		// 输入预测：与增强同协议、独立进程；启动期只装配，首次预测才拉起侧车。
 		promptSuggestionService = createCompletionHelperService("suggest");
 		quitCleanup.register("prompt-suggestion", () => promptSuggestionService?.dispose());
+		// 聊天目录短意图：独立侧车，避免与增强/预测互相打断；首次新聊天才拉起。
+		chatWorkspaceIntentService = createCompletionHelperService("chat-workspace-intent");
+		quitCleanup.register("chat-workspace-intent", () => chatWorkspaceIntentService?.dispose());
 		// 记忆学习循环：只在用户开启开关后才会被调用（见 registerIpc 里的回合结算钩子），
 		// 这里只装配实例——侧车进程仍然是首次真正需要时才拉起。
 		agentMemoryLearnService = createCompletionHelperService("agent-memory");
@@ -7184,9 +7203,7 @@ app
 		sessionCatalog = new SessionCatalog(
 			join(app.getPath("userData"), "session-catalog.json"),
 			{},
-			// 会话路径统一绝对化：pi 的 sessionDir 配置为相对路径（如 ".pi/sessions"）时，
-			// get_state 返回的 sessionFile 是相对 cwd 的；与扫描器绝对路径 originKey 不一致
-			// 会导致同一会话在侧栏出现两条记录。加载与写入边界都经此归一化。
+			// 会话路径统一绝对化，避免相对 sessionDir 导致重复身份。
 			(projectId, filePath, environment) => {
 				const project = projectStore.get(projectId);
 				if (!project || !isLocalProject(project)) return filePath;
@@ -7206,6 +7223,20 @@ app
 			},
 			// 远端会话登记（ensureRemoteSession）也写 hostId 引用，用同一道门。
 			{ referenceGuard: remoteReferenceWriteGuard },
+		);
+		chatWorkspaceService = new ChatWorkspaceService(
+			app.getPath("userData"),
+			(id) => projectStore.get(id),
+			sessionCatalog,
+			() => new Date(),
+			createChatWorkspaceIntentGenerator({
+				completer: () => chatWorkspaceIntentService,
+				resolveModel: resolveChatWorkspaceIntentModel,
+				logger: {
+					info: (message, detail) => void appLogger.info("chat-workspace", message, detail),
+					warn: (message, detail) => void appLogger.warn("chat-workspace", message, detail),
+				},
+			}),
 		);
 		automationStore = new AutomationStore(join(app.getPath("userData"), "automation.json"));
 		const automationStorePreload = automationStore.load();
@@ -7604,9 +7635,7 @@ app
 				void appLogger.warn("agent-memory", "learn pass crashed", { error: error instanceof Error ? error.message : String(error) });
 			});
 		});
-		// 项目位置注入给会话协调器：远端会话在 pi 上报会话文件之前没有 ssh 身份，"这条会话的 runtime
-		// 在哪台机器上"只能由项目 locator 回答（AgentManager 也按它路由 runtime）。位置真相同的单一
-		// 来源仍然是 projectStore，这里只给一个只读取值器。
+		// 项目位置来自 ProjectStore；聊天目录服务在同一激活链路内分配 cwd。
 		sessionRuntimeCoordinator = new SessionRuntimeCoordinator(
 			sessionCatalog,
 			compositeAgentGateway,
@@ -7616,8 +7645,8 @@ app
 				const project = projectStore.get(projectId);
 				return project && !isLocalProject(project) ? project.locator : undefined;
 			},
-			// 远端会话文件改写端口（P4.5c）：调用时解析——端口在 registerIpc() 里才装配（见模块级声明）。
 			() => remoteSessionMessageMutation,
+			chatWorkspaceService,
 		);
 		// 终态惰性解绑（getAgentId → unbindTerminalAgent）发生在查询路径里，必须把解绑推给渲染层：
 		// 否则渲染层快照停在 error，红点常亮且「关闭 Agent」永远对不上存在的运行实例。

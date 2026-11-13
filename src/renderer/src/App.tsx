@@ -129,6 +129,7 @@ import { useSendShortcut } from "./hooks/settings/useSendShortcut";
 import { useSessionRunControl } from "./hooks/session/useSessionRunControl";
 import { useCloseSessionTabShortcut } from "./hooks/useCloseSessionTabShortcut";
 import { useProjectFileTreeController } from "./hooks/files/useProjectFileTreeController";
+import { sessionFileBaseDir } from "./hooks/files/sessionDirectoryServices";
 import { useProjectServices } from "./hooks/useProjectServices";
 import { useSessionDurationTracking } from "./hooks/session/useSessionDurationTracking";
 import { useSessionPromptDispatch } from "./hooks/session/useSessionPromptDispatch";
@@ -931,10 +932,7 @@ export function App() {
 	const pendingComposerCaretRef = useRef<number | null>(null);
 	const pendingAgentsRef = useRef<PendingAgentTab[]>([]);
 
-	// 项目文件树域（展开持久化/自愈/下钻/切换加载）收口到 useProjectFileTreeController。
-	// 文件树是纯本机能力：远端项目没有本机 path，hook 需要据此跳过一切本地 files:list。
-	// 本地树的数据入口同样走 ProjectServices（useProjectServices 支持 Project | undefined：
-	// 没有活动项目时不建 runtime/subscription）。
+	// Session directory reads retain project-relative identities for existing file actions.
 	const activeProject = projects.find((project) => project.id === activeProjectId);
 	const localFileTreeProject = activeProject !== undefined && isLocalProject(activeProject) ? activeProject : undefined;
 	const localFileTreeServices = useProjectServices(localFileTreeProject);
@@ -1265,6 +1263,7 @@ export function App() {
 	// 会话内文件链接路由：两个口子分开——
 	// 会话文件链接域（分级打开/安全门/抽屉切换）收口到 useSessionFileLinks
 	const { openSessionFilePath, requestExternalPathOpen, externalPathOpenDialog, handleOpenLinkedFile, handleToolDrawerAction } = useSessionFileLinks({
+		activeBaseDir: sessionFileBaseDir(currentSessionRuntime?.cwd, currentSessionRecord?.workspacePath, activeProject?.path),
 		activeAgent,
 		activeProject,
 		projects,
@@ -3441,7 +3440,7 @@ export function App() {
 		openEditorTab,
 		api,
 		t,
-		projectRoot: activeProject?.path,
+		projectRoot: activeProject?.kind === "chat" && currentSessionRecord?.projectId === activeProject.id ? (currentSessionRecord.workspacePath ?? activeProject.path) : activeProject?.path,
 		onDropFiles: (targetDir, fileList) => {
 			// 从 OS 拖入：解析本地路径后复制到目标目录（目录不支持跨源复制时跳过）
 			const paths: string[] = [];
@@ -3499,7 +3498,7 @@ export function App() {
 
 	return (
 		// 非会话静态区域使用当前焦点作为兜底；每个 SessionRuntimeInjector 会用本栏 cwd/project 覆盖。
-		<FileLinkBaseProvider baseDir={activeAgent?.cwd ?? activeProject?.path} projectId={activeProject?.id} projectRoot={activeProject?.path} sessionId={currentSessionId}>
+		<FileLinkBaseProvider baseDir={sessionFileBaseDir(currentSessionRuntime?.cwd, currentSessionRecord?.workspacePath, activeProject?.path)} projectId={activeProject?.id} projectRoot={activeProject?.path} sessionId={currentSessionId}>
 			<>
 				<WallpaperVideoLayer settings={settings} />
 				<AppBootstrap {...bootstrapProps} />

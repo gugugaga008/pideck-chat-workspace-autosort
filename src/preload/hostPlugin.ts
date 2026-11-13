@@ -51,6 +51,10 @@ const api: HostPluginApi = {
 		delete: (groupId) => request({ method: "sessionGroups.delete", groupId }),
 		reorder: (groupIds) => request({ method: "sessionGroups.reorder", groupIds }),
 	},
+	chatWorkspace: {
+		getSettings: () => request({ method: "chatWorkspace.getSettings" }),
+		updateSettings: (settings) => request({ method: "chatWorkspace.updateSettings", settings }),
+	},
 	onEvent: (listener) => {
 		const handler = (_event: Electron.IpcRendererEvent, event: HostPluginEvent) => listener(event);
 		ipcRenderer.on(ipcChannels.hostPluginEvent, handler);
