@@ -221,8 +221,13 @@ node .\cli.mjs inspect-exe --exe "D:/Users/MSI-1/AppData/Local/Programs/PiDeck/P
 
 | 仓库 | 范围 | 当前提交 |
 |---|---|---|
-| `PiDeck/` | PiDeck 上游 `0.12.0` + 本功能源码；保留上游历史 | 分支 `local/chat-workspace-1.1.0`，标签 `workspace-autosort-1.1.0` |
-| 本目录 | 安装/检查/恢复工具、插件、文档、测试、包 manifest | 根仓库 `v1.1.0` |
+| `PiDeck/` | PiDeck 上游 `0.12.0` + 本功能源码；保留上游历史 | 本地分支 `local/chat-workspace-1.1.0`，标签 `workspace-autosort-1.1.0` |
+| 本目录 | 安装/检查/恢复工具、插件、文档、测试、包 manifest | 根仓库 `main`，标签 `v1.1.0` |
+
+远程仓库：`https://github.com/gugugaga008/pideck-chat-workspace-autosort`
+
+- 工具仓库：`main` + `v1.1.0`
+- 源码历史：`source/pideck-0.12.0-chat-workspace-1.1.0` + `workspace-autosort-1.1.0`（与 `main` 是独立历史，只用于备份源码，不影响工具分支）
 
 `PiDeck.commit` 记录源码提交号，根仓库通过它关联对应的 PiDeck 提交。`app.asar`、`backups/`、`verification/app/`、隔离测试 profile、日志和依赖目录都不入库，避免把 100 MB 级二进制或本机运行数据写进历史。包 manifest 会入库，`app.asar` 需要时用 `prepare-base.mjs` + `build-patch.mjs` 重建。
 

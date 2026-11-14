@@ -3,3 +3,5 @@ base: cf57f7f0012f7a30431ac6164802eb1e08bab843
 branch: local/chat-workspace-1.1.0
 commit: 224d5639aacfe9715b1ec1c7062811946b4294c6
 tag: workspace-autosort-1.1.0
+remote: https://github.com/gugugaga008/pideck-chat-workspace-autosort.git
+remote-branch: source/pideck-0.12.0-chat-workspace-1.1.0
